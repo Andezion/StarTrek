@@ -6,7 +6,7 @@
 
 #define EARTH_RADIUS 6371000.0      // Радиус Земли в метрах
 #define EARTH_MASS 5.972e24         // Масса Земли в кг
-#define G_CONSTANT 6.674e-11        // Гравитационная постоянная м3/(кг·с2)
+#define G_CONSTANT 6.674e-11        // Гравитационная постоянная м3/(кг*с2)
 #define ORBITAL_VELOCITY 7900.0     // Первая космическая скорость м/с
 #define ATMOSPHERE_HEIGHT 100000.0  // Граница атмосферы м (линия Кармана)
 
