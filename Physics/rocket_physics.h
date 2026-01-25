@@ -4,35 +4,34 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-// Физические константы
 #define EARTH_RADIUS 6371000.0      // Радиус Земли в метрах
 #define EARTH_MASS 5.972e24         // Масса Земли в кг
 #define G_CONSTANT 6.674e-11        // Гравитационная постоянная м3/(кг·с2)
 #define ORBITAL_VELOCITY 7900.0     // Первая космическая скорость м/с
 #define ATMOSPHERE_HEIGHT 100000.0  // Граница атмосферы м (линия Кармана)
 
-// Типы топлива
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 typedef enum {
     FUEL_TYPE_KEROSENE,     // Керосин
     FUEL_TYPE_LIQUID_H2,    // Жидкий водород
     FUEL_TYPE_SOLID         // Твердое топливо
 } FuelType;
 
-// Вектор 3D для позиции, скорости, ускорения
 typedef struct {
     double x;
     double y;
     double z;
 } Vector3;
 
-// Двигатель ракеты
 typedef struct {
     double thrust;          // Тяга в Ньютонах
     double fuel_consumption; // Расход топлива кг/с
     bool is_active;         // Активен ли двигатель
 } Engine;
 
-// Конфигурация ракеты
 typedef struct {
     char name[64];          // Название ракеты
     double mass_empty;      // Масса пустой ракеты в кг
@@ -47,7 +46,6 @@ typedef struct {
     double cross_section;   // Площадь поперечного сечения м2
 } RocketConfig;
 
-// Состояние ракеты в реальном времени
 typedef struct {
     Vector3 position;       // Позиция в метрах (декартовы координаты)
     Vector3 velocity;       // Скорость в м/с
@@ -66,7 +64,6 @@ typedef struct {
     double time;            // Время симуляции в секундах
 } RocketState;
 
-// Команды управления от сервера
 typedef struct {
     double* engine_throttle; // Массив дросселей для каждого двигателя (0.0 - 1.0)
     uint32_t engine_count;
@@ -76,45 +73,28 @@ typedef struct {
     double roll;            // Угол крена (вращение вокруг оси)
 } ControlCommand;
 
-// Функции физического движка
 
-// Инициализация ракеты
 RocketState* rocket_init(const RocketConfig* config, Vector3 initial_position);
 
-// Освобождение ресурсов
 void rocket_free(RocketState* state);
-
-// Обновление физики (один шаг симуляции)
 void rocket_update(RocketState* state, const RocketConfig* config,
                    const ControlCommand* command, double delta_time);
 
-// Расчет гравитационного ускорения на текущей высоте
 Vector3 calculate_gravity(const Vector3* position);
-
-// Расчет сопротивления атмосферы
 Vector3 calculate_drag(const RocketState* state, const RocketConfig* config);
-
-// Расчет тяги двигателей
 Vector3 calculate_thrust(const RocketConfig* config, const ControlCommand* command);
 
-// Расчет расхода топлива
 double calculate_fuel_consumption(const RocketConfig* config,
                                   const ControlCommand* command, double delta_time);
 
-// Проверка столкновения с Землей
 bool check_ground_collision(const RocketState* state);
-
-// Проверка достижения орбиты
 bool check_orbital_stability(const RocketState* state);
 
-// Конвертация декартовых координат в сферические (широта, долгота, высота)
 void cartesian_to_spherical(const Vector3* position, double* latitude,
                             double* longitude, double* altitude);
 
-// Конвертация сферических координат в декартовые
 Vector3 spherical_to_cartesian(double latitude, double longitude, double altitude);
 
-// Векторные операции
 Vector3 vector_add(const Vector3* a, const Vector3* b);
 Vector3 vector_sub(const Vector3* a, const Vector3* b);
 Vector3 vector_scale(const Vector3* v, double scalar);
