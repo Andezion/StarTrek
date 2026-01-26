@@ -32,8 +32,16 @@ type RocketConnection struct {
 	mu         sync.RWMutex
 }
 
+type ObserverConnection struct {
+	ID         string
+	Conn       *websocket.Conn
+	LastUpdate time.Time
+	mu         sync.RWMutex
+}
+
 type Server struct {
 	rockets                map[string]*RocketConnection
+	observers              map[string]*ObserverConnection
 	mu                     sync.RWMutex
 	collisionCheckInterval time.Duration
 	minSafeDistance        float64
@@ -42,6 +50,7 @@ type Server struct {
 func NewServer() *Server {
 	return &Server{
 		rockets:                make(map[string]*RocketConnection),
+		observers:              make(map[string]*ObserverConnection),
 		collisionCheckInterval: 1 * time.Second,
 		minSafeDistance:        1000.0,
 	}
@@ -76,6 +85,7 @@ func (s *Server) handleClient(conn *websocket.Conn) {
 	defer conn.Close()
 
 	var rocketConn *RocketConnection
+	var observerConn *ObserverConnection
 
 	for {
 		_, msgBytes, err := conn.ReadMessage()
@@ -83,6 +93,10 @@ func (s *Server) handleClient(conn *websocket.Conn) {
 			if rocketConn != nil {
 				log.Printf("Ракета %s отключилась: %v", rocketConn.ID, err)
 				s.removeRocket(rocketConn.ID)
+			}
+			if observerConn != nil {
+				log.Printf("Наблюдатель %s отключился: %v", observerConn.ID, err)
+				s.removeObserver(observerConn.ID)
 			}
 			break
 		}
@@ -106,6 +120,16 @@ func (s *Server) handleClient(conn *websocket.Conn) {
 			if rocketConn != nil {
 				log.Printf("Ракета %s запросила отключение", rocketConn.ID)
 				s.removeRocket(rocketConn.ID)
+				return
+			}
+
+		case protocol.MsgTypeSubscribe:
+			observerConn = s.handleSubscribe(conn, msg)
+
+		case protocol.MsgTypeUnsubscribe:
+			if observerConn != nil {
+				log.Printf("Наблюдатель %s отписался", observerConn.ID)
+				s.removeObserver(observerConn.ID)
 				return
 			}
 		}
@@ -156,6 +180,12 @@ func (s *Server) handleRegister(conn *websocket.Conn, msg protocol.Message) *Roc
 		Message:  "Регистрация успешна. Вы можете начинать запуск.",
 	})
 
+	s.broadcastToObservers(protocol.MsgTypeRocketJoined, protocol.RocketJoinedMessage{
+		RocketID: registerMsg.RocketID,
+		Name:     registerMsg.Config.Name,
+		Config:   registerMsg.Config,
+	})
+
 	log.Printf("Ракета %s (%s) зарегистрирована", registerMsg.RocketID, registerMsg.Config.Name)
 
 	return rocketConn
@@ -172,7 +202,14 @@ func (s *Server) handleTelemetry(rocketConn *RocketConnection, msg protocol.Mess
 	rocketConn.mu.Lock()
 	rocketConn.State = telemetryMsg.State
 	rocketConn.LastUpdate = time.Now()
+	rocketName := rocketConn.Config.Name
 	rocketConn.mu.Unlock()
+
+	s.broadcastToObservers(protocol.MsgTypeBroadcast, protocol.BroadcastMessage{
+		RocketID: rocketConn.ID,
+		Name:     rocketName,
+		State:    telemetryMsg.State,
+	})
 
 	if int(telemetryMsg.State.Time)%10 == 0 {
 		log.Printf("Ракета %s: высота=%.2f км, скорость=%.1f м/с, топливо=%.0f кг",
@@ -185,9 +222,83 @@ func (s *Server) handleTelemetry(rocketConn *RocketConnection, msg protocol.Mess
 
 func (s *Server) removeRocket(rocketID string) {
 	s.mu.Lock()
+	rocket, exists := s.rockets[rocketID]
 	delete(s.rockets, rocketID)
 	s.mu.Unlock()
-	log.Printf("Ракета %s удалена из списка", rocketID)
+
+	if exists {
+		s.broadcastToObservers(protocol.MsgTypeRocketLeft, protocol.RocketLeftMessage{
+			RocketID: rocketID,
+			Reason:   "disconnected",
+		})
+		log.Printf("Ракета %s (%s) удалена из списка", rocketID, rocket.Config.Name)
+	}
+}
+
+func (s *Server) handleSubscribe(conn *websocket.Conn, msg protocol.Message) *ObserverConnection {
+	data, _ := json.Marshal(msg.Data)
+	var subscribeMsg protocol.SubscribeMessage
+	if err := json.Unmarshal(data, &subscribeMsg); err != nil {
+		log.Printf("Ошибка декодирования подписки: %v", err)
+		return nil
+	}
+
+	observerConn := &ObserverConnection{
+		ID:         subscribeMsg.ObserverID,
+		Conn:       conn,
+		LastUpdate: time.Now(),
+	}
+
+	s.mu.Lock()
+	s.observers[subscribeMsg.ObserverID] = observerConn
+	s.mu.Unlock()
+
+	s.sendCurrentRocketsToObserver(observerConn)
+
+	log.Printf("Наблюдатель %s подписался на события", subscribeMsg.ObserverID)
+	return observerConn
+}
+
+func (s *Server) removeObserver(observerID string) {
+	s.mu.Lock()
+	delete(s.observers, observerID)
+	s.mu.Unlock()
+	log.Printf("Наблюдатель %s удален из списка", observerID)
+}
+
+func (s *Server) sendCurrentRocketsToObserver(observer *ObserverConnection) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	for _, rocket := range s.rockets {
+		rocket.mu.RLock()
+		s.sendMessage(observer.Conn, protocol.MsgTypeRocketJoined, protocol.RocketJoinedMessage{
+			RocketID: rocket.ID,
+			Name:     rocket.Config.Name,
+			Config:   rocket.Config,
+		})
+		s.sendMessage(observer.Conn, protocol.MsgTypeBroadcast, protocol.BroadcastMessage{
+			RocketID: rocket.ID,
+			Name:     rocket.Config.Name,
+			State:    rocket.State,
+		})
+		rocket.mu.RUnlock()
+	}
+}
+
+func (s *Server) broadcastToObservers(msgType protocol.MessageType, data interface{}) {
+	s.mu.RLock()
+	observers := make([]*ObserverConnection, 0, len(s.observers))
+	for _, obs := range s.observers {
+		observers = append(observers, obs)
+	}
+	s.mu.RUnlock()
+
+	for _, obs := range observers {
+		obs.mu.Lock()
+		s.sendMessage(obs.Conn, msgType, data)
+		obs.mu.Unlock()
+	}
 }
 
 func (s *Server) collisionCheckLoop() {
