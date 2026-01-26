@@ -16,6 +16,12 @@ const (
 	MsgTypeShutdown   MessageType = "shutdown"    // Команда на выключение
 	MsgTypeTrajectory MessageType = "trajectory"  // Рекомендуемая траектория
 	MsgTypeRocketList MessageType = "rocket_list" // Список активных ракет
+
+	MsgTypeSubscribe    MessageType = "subscribe"     // Подписка на события (от визуализатора)
+	MsgTypeUnsubscribe  MessageType = "unsubscribe"   // Отписка от событий
+	MsgTypeBroadcast    MessageType = "broadcast"     // Рассылка телеметрии наблюдателям
+	MsgTypeRocketJoined MessageType = "rocket_joined" // Новая ракета подключилась
+	MsgTypeRocketLeft   MessageType = "rocket_left"   // Ракета отключилась
 )
 
 type FuelType string
@@ -124,6 +130,31 @@ type RocketListMessage struct {
 }
 
 type DisconnectMessage struct {
+	RocketID string `json:"rocket_id"`
+	Reason   string `json:"reason"`
+}
+
+type SubscribeMessage struct {
+	ObserverID string `json:"observer_id"`
+}
+
+type UnsubscribeMessage struct {
+	ObserverID string `json:"observer_id"`
+}
+
+type BroadcastMessage struct {
+	RocketID string      `json:"rocket_id"`
+	Name     string      `json:"name"`
+	State    RocketState `json:"state"`
+}
+
+type RocketJoinedMessage struct {
+	RocketID string       `json:"rocket_id"`
+	Name     string       `json:"name"`
+	Config   RocketConfig `json:"config"`
+}
+
+type RocketLeftMessage struct {
 	RocketID string `json:"rocket_id"`
 	Reason   string `json:"reason"`
 }
