@@ -231,7 +231,7 @@ curl http://localhost:8080/rockets | jq
 # Мыс Канаверал
 ./cosmodrom-client -lat 28.573 -lon -80.649 -name "Popa2"
 
-# Куру (Французская Гвиана)
+# Куру 
 ./cosmodrom-client -lat 5.239 -lon -52.768 -name "Popa3"
 ```
 
