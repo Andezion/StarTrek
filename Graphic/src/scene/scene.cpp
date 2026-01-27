@@ -79,9 +79,9 @@ void Scene::renderRocket(RocketData* rocket) {
 
     Color rocketColor = rocket->getColor();
 
-    float rocketSize = 2.0f;
+    float rocketSize = 0.8f;
     if (rocket->isActive()) {
-        rocketSize = 3.0f;
+        rocketSize = 1.2f;
     }
 
     ::Vector3 direction = {0, 0, 1};
