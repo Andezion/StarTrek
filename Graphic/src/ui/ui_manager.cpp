@@ -89,31 +89,34 @@ void UIManager::renderCreatePanel(float& y) {
     }
     y += 35;
 
-    DrawText("Latitude:", static_cast<int>(padding), static_cast<int>(y), 12, WHITE);
+    DrawText("Cosmodrome:", static_cast<int>(padding), static_cast<int>(y), 12, WHITE);
     y += 15;
 
-    Rectangle latRect = {padding, y, width, 20};
-    GuiSliderBar(latRect, "-90", "90", &m_launchLat, -90.0f, 90.0f);
-    char latText[32];
-    snprintf(latText, sizeof(latText), "%.2f", m_launchLat);
-    DrawText(latText, static_cast<int>(padding + width/2 - 20), static_cast<int>(y + 2), 12, WHITE);
-    y += 30;
+    const auto& cosmodromes = m_state.getCosmodromes();
+    float itemHeight = 22.0f;
 
-    DrawText("Longitude:", static_cast<int>(padding), static_cast<int>(y), 12, WHITE);
-    y += 15;
+    for (int i = 0; i < static_cast<int>(cosmodromes.size()); i++) {
+        Rectangle itemRect = {padding, y, width, itemHeight};
+        bool isSelected = (i == m_selectedCosmodromeIndex);
 
-    Rectangle lonRect = {padding, y, width, 20};
-    GuiSliderBar(lonRect, "-180", "180", &m_launchLon, -180.0f, 180.0f);
-    char lonText[32];
-    snprintf(lonText, sizeof(lonText), "%.2f", m_launchLon);
-    DrawText(lonText, static_cast<int>(padding + width/2 - 20), static_cast<int>(y + 2), 12, WHITE);
-    y += 30;
+        Color bgColor = isSelected ? DARKGREEN : Fade(BLACK, 0.3f);
+        DrawRectangleRec(itemRect, bgColor);
+        DrawRectangleLinesEx(itemRect, 1, isSelected ? GREEN : GRAY);
+
+        DrawText(cosmodromes[i].name.c_str(), static_cast<int>(padding + 5), static_cast<int>(y + 4), 12, WHITE);
+
+        if (CheckCollisionPointRec(GetMousePosition(), itemRect) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+            m_selectedCosmodromeIndex = i;
+        }
+
+        y += itemHeight + 2;
+    }
+    y += 10;
 
     Rectangle launchRect = {padding, y, width, 30};
     if (GuiButton(launchRect, "LAUNCH ROCKET")) {
-        if (m_launchCallback) {
-            m_launchCallback(m_rocketName, static_cast<double>(m_launchLat),
-                           static_cast<double>(m_launchLon));
+        if (m_launchCallback && m_selectedCosmodromeIndex >= 0) {
+            m_launchCallback(m_rocketName, m_selectedCosmodromeIndex);
             addLog("Launching: " + std::string(m_rocketName), GREEN);
         }
     }

@@ -74,8 +74,8 @@ void Application::initScene() {
 void Application::initUI() {
     m_ui = std::make_unique<UIManager>(*m_state, m_config.screenWidth, m_config.screenHeight);
 
-    m_ui->setLaunchCallback([this](const std::string& name, double lat, double lon) {
-        onLaunchRocket(name, lat, lon);
+    m_ui->setLaunchCallback([this](const std::string& name, int cosmodromeIndex) {
+        onLaunchRocket(name, cosmodromeIndex);
     });
 
     m_ui->setTrackCallback([this](const std::string& rocketId) {
@@ -157,22 +157,31 @@ void Application::onConnectionChanged(bool connected) {
     }
 }
 
-void Application::onLaunchRocket(const std::string& name, double lat, double lon) {
+void Application::onLaunchRocket(const std::string& name, int cosmodromeIndex) {
+    const auto& cosmodromes = m_state->getCosmodromes();
+    if (cosmodromeIndex < 0 || cosmodromeIndex >= static_cast<int>(cosmodromes.size())) {
+        m_ui->addError("Invalid cosmodrome");
+        return;
+    }
+
+    const auto& cosmodrome = cosmodromes[cosmodromeIndex];
+
     std::random_device rd;
     std::mt19937 gen(rd());
     std::uniform_int_distribution<> dis(10000, 99999);
     std::string rocketId = "rocket-" + std::to_string(dis(gen));
 
-    char cmd[512];
+    char cmd[1024];
     snprintf(cmd, sizeof(cmd),
-             "../../Client/cosmodrom-client -id %s -name \"%s\" -lat %.3f -lon %.3f &",
-             rocketId.c_str(), name.c_str(), lat, lon);
+             "cd ../../Client && LD_LIBRARY_PATH=../Physics:$LD_LIBRARY_PATH "
+             "./cosmodrom-client -id %s -name \"%s\" -lat %.3f -lon %.3f &",
+             rocketId.c_str(), name.c_str(), cosmodrome.latitude, cosmodrome.longitude);
 
     int result = system(cmd);
     if (result == 0) {
-        m_ui->addLog("Launched rocket subprocess", GREEN);
+        m_ui->addLog("Launching from " + cosmodrome.name, GREEN);
     } else {
-        m_ui->addError("Failed to launch rocket (check if Client is built)");
+        m_ui->addError("Failed to launch rocket");
     }
 }
 
