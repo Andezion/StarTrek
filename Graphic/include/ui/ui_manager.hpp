@@ -23,7 +23,7 @@ public:
     void update();
     void render();
 
-    using LaunchCallback = std::function<void(const std::string& name, double lat, double lon)>;
+    using LaunchCallback = std::function<void(const std::string& name, int cosmodromeIndex)>;
     using TrackCallback = std::function<void(const std::string& rocketId)>;
     using StopTrackCallback = std::function<void()>;
 
@@ -51,8 +51,7 @@ private:
 
     char m_rocketName[64] = "NewRocket";
     bool m_nameEditMode = false;
-    float m_launchLat = 45.965f;
-    float m_launchLon = 63.305f;
+    int m_selectedCosmodromeIndex = 0;
 
     std::vector<LogEntry> m_logs;
     static constexpr size_t MAX_LOGS = 50;
