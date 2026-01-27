@@ -165,14 +165,14 @@ void Application::onLaunchRocket(const std::string& name, double lat, double lon
 
     char cmd[512];
     snprintf(cmd, sizeof(cmd),
-             "../Client/cosmodrom-client -id %s -name \"%s\" -lat %.3f -lon %.3f &",
+             "../../Client/cosmodrom-client -id %s -name \"%s\" -lat %.3f -lon %.3f &",
              rocketId.c_str(), name.c_str(), lat, lon);
 
     int result = system(cmd);
     if (result == 0) {
         m_ui->addLog("Launched rocket subprocess", GREEN);
     } else {
-        m_ui->addError("Failed to launch rocket");
+        m_ui->addError("Failed to launch rocket (check if Client is built)");
     }
 }
 
@@ -189,7 +189,11 @@ void Application::onStopTracking() {
 void Application::shutdown() {
     if (m_wsClient) {
         m_wsClient->disconnect();
+        m_wsClient.reset();  
     }
+    m_ui.reset();
+    m_scene.reset();
+    m_state.reset();
     CloseWindow();
 }
 
