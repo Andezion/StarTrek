@@ -50,7 +50,7 @@ private:
     void onWarning(const WarningMessage& msg);
     void onConnectionChanged(bool connected);
 
-    void onLaunchRocket(const std::string& name, double lat, double lon);
+    void onLaunchRocket(const std::string& name, int cosmodromeIndex);
     void onTrackRocket(const std::string& rocketId);
     void onStopTracking();
 
