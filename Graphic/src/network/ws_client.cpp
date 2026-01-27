@@ -1,6 +1,7 @@
 #include "network/ws_client.hpp"
 #include <nlohmann/json.hpp>
 #include <chrono>
+#include <ctime>
 #include <random>
 
 namespace cosmodrom {
@@ -75,9 +76,14 @@ void WebSocketClient::onMessage(const ix::WebSocketMessagePtr& msg) {
 }
 
 void WebSocketClient::sendSubscribe() {
+    auto now = std::chrono::system_clock::now();
+    auto time_t_now = std::chrono::system_clock::to_time_t(now);
+    char timestamp[64];
+    std::strftime(timestamp, sizeof(timestamp), "%Y-%m-%dT%H:%M:%SZ", std::gmtime(&time_t_now));
+
     nlohmann::json msg;
     msg["type"] = "subscribe";
-    msg["timestamp"] = std::chrono::system_clock::now().time_since_epoch().count();
+    msg["timestamp"] = std::string(timestamp);
     msg["data"] = {{"observer_id", m_observerId}};
 
     m_webSocket.send(msg.dump());
