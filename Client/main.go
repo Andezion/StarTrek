@@ -267,17 +267,14 @@ func main() {
 
 	config := protocol.RocketConfig{
 		Name:            *rocketName,
-		MassEmpty:       5000.0,
-		MassFuel:        15000.0,
-		MassFuelMax:     15000.0,
+		MassEmpty:       20000.0,  // Масса пустой ракеты
+		MassFuel:        400000.0, // Топливо (достаточно для орбиты)
+		MassFuelMax:     400000.0,
 		FuelType:        protocol.FuelTypeKerosene,
-		DragCoefficient: 0.5,
-		CrossSection:    10.0,
+		DragCoefficient: 0.3,  // Аэродинамический коэффициент
+		CrossSection:    12.0, // Площадь сечения м2
 		Engines: []protocol.Engine{
-			{Thrust: 500000.0, FuelConsumption: 250.0, IsActive: true},
-			{Thrust: 500000.0, FuelConsumption: 250.0, IsActive: true},
-			{Thrust: 500000.0, FuelConsumption: 250.0, IsActive: true},
-			{Thrust: 500000.0, FuelConsumption: 250.0, IsActive: true},
+			{Thrust: 7600000.0, FuelConsumption: 2500.0, IsActive: true}, // Merlin engine
 		},
 	}
 
