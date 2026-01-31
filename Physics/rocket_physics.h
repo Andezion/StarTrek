@@ -82,7 +82,8 @@ void rocket_update(RocketState* state, const RocketConfig* config,
 
 Vector3 calculate_gravity(const Vector3* position);
 Vector3 calculate_drag(const RocketState* state, const RocketConfig* config);
-Vector3 calculate_thrust(const RocketConfig* config, const ControlCommand* command);
+Vector3 calculate_thrust(const RocketConfig* config, const ControlCommand* command,
+                         const Vector3* position);
 
 double calculate_fuel_consumption(const RocketConfig* config,
                                   const ControlCommand* command, double delta_time);
