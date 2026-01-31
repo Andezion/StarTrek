@@ -133,9 +133,25 @@ func (r *RocketClient) Run() {
 	for r.running {
 		<-ticker.C
 
+		state := r.physics.GetState()
+		alt := state.Altitude
+		if alt < 1000.0 {
+			r.command.Pitch = 0.0
+		} else if alt < 10000.0 {
+			r.command.Pitch = (alt - 1000.0) / (10000.0 - 1000.0) * 20.0
+		} else if alt < 50000.0 {
+			r.command.Pitch = 20.0 + (alt-10000.0)/(50000.0-10000.0)*50.0
+		} else {
+			if alt < 100000.0 {
+				r.command.Pitch = 70.0 + (alt-50000.0)/(100000.0-50000.0)*15.0
+			} else {
+				r.command.Pitch = 85.0
+			}
+		}
+
 		r.physics.Update(&r.command, dt)
 
-		state := r.physics.GetState()
+		state = r.physics.GetState()
 
 		if state.FuelRemaining <= 0 {
 			for i := range r.command.EngineThrottle {
