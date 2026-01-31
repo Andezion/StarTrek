@@ -17,6 +17,16 @@ void Scene::update(float deltaTime) {
         RocketData* rocket = m_state.getRocket(m_followingRocketId);
         if (rocket) {
             ::Vector3 visualPos = worldToVisual(rocket->getState().position);
+
+            float rocketVisualDist = std::sqrt(
+                visualPos.x * visualPos.x +
+                visualPos.y * visualPos.y +
+                visualPos.z * visualPos.z);
+            float minCameraDist = rocketVisualDist * 1.8f + EARTH_VISUAL_RADIUS;
+            if (m_camera.getDistance() < minCameraDist) {
+                m_camera.zoom(m_camera.getDistance() - minCameraDist);
+            }
+
             m_camera.followTarget(visualPos);
         } else {
             m_followingRocketId.clear();
