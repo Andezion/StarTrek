@@ -10,8 +10,8 @@
 namespace cosmodrom {
 
 struct AppConfig {
-    int screenWidth = 1280;
-    int screenHeight = 720;
+    int screenWidth = 1920;
+    int screenHeight = 1080;
     std::string windowTitle = "Cosmodrom 3D Visualizer";
     std::string serverUrl = "ws://localhost:8080/ws";
     int targetFPS = 60;
