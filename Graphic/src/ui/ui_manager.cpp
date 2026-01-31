@@ -1,5 +1,6 @@
 #include "ui/ui_manager.hpp"
 #include <cstdlib>
+#include <cmath>
 
 #ifndef TextToFloat
 static inline float TextToFloat(const char* text) {
@@ -196,7 +197,7 @@ void UIManager::renderControlPanel(float& y) {
     float padding = 10.0f;
     float width = PANEL_WIDTH - 2 * padding;
 
-    DrawText("CONTROLS", static_cast<int>(padding), static_cast<int>(y), 16, LIGHTGRAY);
+    DrawText("TELEMETRY", static_cast<int>(padding), static_cast<int>(y), 16, LIGHTGRAY);
     y += 25;
 
     auto rockets = m_state.getAllRockets();
@@ -206,20 +207,100 @@ void UIManager::renderControlPanel(float& y) {
         const RocketState& state = rocket->getState();
 
         DrawText(rocket->getName().c_str(), static_cast<int>(padding), static_cast<int>(y), 14, rocket->getColor());
-        y += 20;
+        y += 18;
+
+        const char* statusStr = "FLIGHT";
+        Color statusColor = YELLOW;
+        if (state.crashed) { statusStr = "CRASHED"; statusColor = RED; }
+        else if (state.landed) { statusStr = "LANDED"; statusColor = GREEN; }
+        else if (state.in_orbit) { statusStr = "IN ORBIT"; statusColor = SKYBLUE; }
+        DrawText(statusStr, static_cast<int>(padding), static_cast<int>(y), 12, statusColor);
+        y += 18;
+
+        DrawLine(static_cast<int>(padding), static_cast<int>(y),
+                 static_cast<int>(PANEL_WIDTH - padding), static_cast<int>(y), Fade(GRAY, 0.5f));
+        y += 5;
 
         char info[128];
-        snprintf(info, sizeof(info), "Alt: %.1f km", state.altitude / 1000.0);
-        DrawText(info, static_cast<int>(padding), static_cast<int>(y), 12, WHITE);
-        y += 15;
 
-        snprintf(info, sizeof(info), "Speed: %.1f m/s", state.speed);
-        DrawText(info, static_cast<int>(padding), static_cast<int>(y), 12, WHITE);
-        y += 15;
+        if (state.altitude >= 1000.0) {
+            snprintf(info, sizeof(info), "Alt: %.2f km", state.altitude / 1000.0);
+        } else {
+            snprintf(info, sizeof(info), "Alt: %.1f m", state.altitude);
+        }
+        DrawText(info, static_cast<int>(padding), static_cast<int>(y), 11, WHITE);
+        y += 14;
+
+        if (state.speed >= 1000.0) {
+            snprintf(info, sizeof(info), "Speed: %.1f m/s (%.1f km/s)", state.speed, state.speed / 1000.0);
+        } else {
+            snprintf(info, sizeof(info), "Speed: %.1f m/s", state.speed);
+        }
+        DrawText(info, static_cast<int>(padding), static_cast<int>(y), 11, WHITE);
+        y += 14;
+
+        double posMag = std::sqrt(state.position.x * state.position.x +
+                                  state.position.y * state.position.y +
+                                  state.position.z * state.position.z);
+        double verticalSpeed = 0.0;
+        if (posMag > 1.0) {
+            verticalSpeed = (state.position.x * state.velocity.x +
+                             state.position.y * state.velocity.y +
+                             state.position.z * state.velocity.z) / posMag;
+        }
+        snprintf(info, sizeof(info), "V.Speed: %.1f m/s %s", std::abs(verticalSpeed),
+                 verticalSpeed >= 0 ? "^" : "v");
+        DrawText(info, static_cast<int>(padding), static_cast<int>(y), 11,
+                 verticalSpeed >= 0 ? GREEN : RED);
+        y += 14;
+
+        double accelMag = std::sqrt(state.acceleration.x * state.acceleration.x +
+                                    state.acceleration.y * state.acceleration.y +
+                                    state.acceleration.z * state.acceleration.z);
+        snprintf(info, sizeof(info), "Accel: %.1f m/s2 (%.1fG)", accelMag, accelMag / 9.81);
+        DrawText(info, static_cast<int>(padding), static_cast<int>(y), 11, WHITE);
+        y += 14;
+
+        snprintf(info, sizeof(info), "Mass: %.0f kg", state.mass_current);
+        DrawText(info, static_cast<int>(padding), static_cast<int>(y), 11, WHITE);
+        y += 14;
 
         snprintf(info, sizeof(info), "Fuel: %.0f kg", state.fuel_remaining);
-        DrawText(info, static_cast<int>(padding), static_cast<int>(y), 12, WHITE);
-        y += 20;
+        DrawText(info, static_cast<int>(padding), static_cast<int>(y), 11, WHITE);
+        y += 14;
+
+        const RocketConfig& cfg = rocket->getConfig();
+        float fuelRatio = 0.0f;
+        if (cfg.mass_fuel_max > 0) {
+            fuelRatio = static_cast<float>(state.fuel_remaining / cfg.mass_fuel_max);
+        }
+        Rectangle fuelBg = {padding, y, width, 8};
+        DrawRectangleRec(fuelBg, Fade(BLACK, 0.5f));
+        Rectangle fuelBar = {padding, y, width * fuelRatio, 8};
+        Color fuelColor = fuelRatio > 0.3f ? GREEN : (fuelRatio > 0.1f ? YELLOW : RED);
+        DrawRectangleRec(fuelBar, fuelColor);
+        DrawRectangleLinesEx(fuelBg, 1, GRAY);
+        y += 13;
+
+        int minutes = static_cast<int>(state.time) / 60;
+        int seconds = static_cast<int>(state.time) % 60;
+        snprintf(info, sizeof(info), "T+%02d:%02d (%.0fs)", minutes, seconds, state.time);
+        DrawText(info, static_cast<int>(padding), static_cast<int>(y), 11, WHITE);
+        y += 14;
+
+        double distance = posMag;
+        if (distance > EARTH_RADIUS) {
+            double orbitalSpeed = std::sqrt(G_CONSTANT * EARTH_MASS / distance);
+            snprintf(info, sizeof(info), "Orb.V: %.0f/%.0f m/s", state.speed, orbitalSpeed);
+            Color orbColor = WHITE;
+            double ratio = state.speed / orbitalSpeed;
+            if (ratio >= 0.9 && ratio <= 1.1) orbColor = SKYBLUE;
+            else if (ratio >= 0.5) orbColor = YELLOW;
+            DrawText(info, static_cast<int>(padding), static_cast<int>(y), 11, orbColor);
+            y += 14;
+        }
+
+        y += 5;
 
         Rectangle trackRect = {padding, y, width / 2 - 5, 25};
         const char* trackText = (rocket->getId() == m_state.getTrackedRocketId()) ? "UNTRACK" : "TRACK";
