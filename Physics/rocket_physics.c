@@ -115,7 +115,8 @@ Vector3 calculate_drag(const RocketState* state, const RocketConfig* config) {
     return drag;
 }
 
-Vector3 calculate_thrust(const RocketConfig* config, const ControlCommand* command) {
+Vector3 calculate_thrust(const RocketConfig* config, const ControlCommand* command,
+                         const Vector3* position) {
     Vector3 total_thrust = {0, 0, 0};
 
     if (!command || !command->engine_throttle) {
@@ -129,10 +130,29 @@ Vector3 calculate_thrust(const RocketConfig* config, const ControlCommand* comma
         }
     }
 
-    // TODO - Добавить расчет ориентации ракеты на основе углов Эйлера
-    Vector3 up_direction = vector_normalize(&(Vector3){0, 0, 1});
+    if (thrust_magnitude < 1e-6) {
+        return total_thrust;
+    }
 
-    total_thrust = vector_scale(&up_direction, thrust_magnitude);
+    Vector3 radial_up = vector_normalize(position);
+
+    Vector3 z_axis = {0, 0, 1};
+    Vector3 east = vector_cross(&radial_up, &z_axis);
+    double east_mag = vector_magnitude(&east);
+    if (east_mag < 0.01) {
+        Vector3 x_axis = {1, 0, 0};
+        east = vector_cross(&radial_up, &x_axis);
+    }
+    east = vector_normalize(&east);
+
+    double pitch_rad = command->pitch * M_PI / 180.0;
+    Vector3 thrust_dir = {
+        radial_up.x * cos(pitch_rad) + east.x * sin(pitch_rad),
+        radial_up.y * cos(pitch_rad) + east.y * sin(pitch_rad),
+        radial_up.z * cos(pitch_rad) + east.z * sin(pitch_rad)
+    };
+
+    total_thrust = vector_scale(&thrust_dir, thrust_magnitude);
 
     return total_thrust;
 }
@@ -184,7 +204,7 @@ void rocket_update(RocketState* state, const RocketConfig* config,
 
     Vector3 gravity_force = calculate_gravity(&state->position);
     Vector3 drag_force = calculate_drag(state, config);
-    Vector3 thrust_force = calculate_thrust(config, command);
+    Vector3 thrust_force = calculate_thrust(config, command, &state->position);
 
     Vector3 total_force = vector_add(&gravity_force, &drag_force);
     total_force = vector_add(&total_force, &thrust_force);
