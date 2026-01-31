@@ -47,7 +47,7 @@ private:
     float m_lerpFactor = 5.0f;
 
     float m_minDistance = 20.0f;
-    float m_maxDistance = 1000.0f;
+    float m_maxDistance = 5000.0f;
 
     bool m_followMode = false;
     ::Vector3 m_followTarget = {0, 0, 0};
