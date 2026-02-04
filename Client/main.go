@@ -135,18 +135,19 @@ func (r *RocketClient) Run() {
 
 		state := r.physics.GetState()
 		alt := state.Altitude
-		if alt < 1000.0 {
+
+		if alt < 500.0 {
 			r.command.Pitch = 0.0
-		} else if alt < 10000.0 {
-			r.command.Pitch = (alt - 1000.0) / (10000.0 - 1000.0) * 20.0
-		} else if alt < 50000.0 {
-			r.command.Pitch = 20.0 + (alt-10000.0)/(50000.0-10000.0)*50.0
+		} else if alt < 600.0 {
+			r.command.Pitch = (alt - 500.0) / (600.0 - 500.0) * 25.0 // 0° → 25°
+		} else if alt < 700.0 {
+			r.command.Pitch = 25.0 + (alt-600.0)/(700.0-600.0)*35.0 // 25° → 60°
+		} else if alt < 800.0 {
+			r.command.Pitch = 60.0 + (alt-700.0)/(800.0-700.0)*20.0 // 60° → 80°
+		} else if alt < 900.0 {
+			r.command.Pitch = 80.0 + (alt-800.0)/(900.0-800.0)*10.0 // 80° → 90°
 		} else {
-			if alt < 100000.0 {
-				r.command.Pitch = 70.0 + (alt-50000.0)/(100000.0-50000.0)*15.0
-			} else {
-				r.command.Pitch = 85.0
-			}
+			r.command.Pitch = 90.0 // Полностью горизонтально
 		}
 
 		r.physics.Update(&r.command, dt)
