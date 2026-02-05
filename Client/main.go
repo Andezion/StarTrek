@@ -88,7 +88,7 @@ func (r *RocketClient) Register() error {
 	}
 }
 
-func (r *RocketClient) InitPhysics(latitude, longitude, altitude float64) error {
+func (r *RocketClient) InitPhysics(latitude, longitude, altitude, targetOrbit float64) error {
 	initialPos := physics.SphericalToCartesian(latitude, longitude, altitude)
 
 	var err error
@@ -96,6 +96,12 @@ func (r *RocketClient) InitPhysics(latitude, longitude, altitude float64) error 
 	if err != nil {
 		return fmt.Errorf("Ошибка инициализации физики: %w", err)
 	}
+
+	planet := physics.EarthDefault()
+	r.physics.SetPlanet(planet)
+
+	gtConfig := physics.GravityTurnForOrbit(planet, targetOrbit)
+	r.physics.SetGravityTurn(gtConfig)
 
 	r.command = protocol.ControlCommand{
 		EngineThrottle: make([]float64, len(r.config.Engines)),
@@ -109,6 +115,8 @@ func (r *RocketClient) InitPhysics(latitude, longitude, altitude float64) error 
 	}
 
 	log.Printf("Физический движок инициализирован")
+	log.Printf("Целевая орбита: %.0f км, начало поворота: %.0f м, окончание: %.0f км",
+		targetOrbit/1000.0, gtConfig.TurnStartAlt, gtConfig.TurnEndAlt/1000.0)
 	return nil
 }
 
@@ -133,26 +141,11 @@ func (r *RocketClient) Run() {
 	for r.running {
 		<-ticker.C
 
-		state := r.physics.GetState()
-		alt := state.Altitude
-
-		if alt < 500.0 {
-			r.command.Pitch = 0.0
-		} else if alt < 1000.0 {
-			r.command.Pitch = (alt - 500.0) / (1000.0 - 500.0) * 25.0 // 0° → 25°
-		} else if alt < 1500.0 {
-			r.command.Pitch = 25.0 + (alt-1000.0)/(1500.0-1000.0)*35.0 // 25° → 60°
-		} else if alt < 2000.0 {
-			r.command.Pitch = 60.0 + (alt-1500.0)/(2000.0-1500.0)*20.0 // 60° → 80°
-		} else if alt < 2500.0 {
-			r.command.Pitch = 80.0 + (alt-2000.0)/(2500.0-2000.0)*10.0 // 80° → 90°
-		} else {
-			r.command.Pitch = 90.0
-		}
+		r.command.Pitch = r.physics.CalculateOptimalPitch()
 
 		r.physics.Update(&r.command, dt)
 
-		state = r.physics.GetState()
+		state := r.physics.GetState()
 
 		if state.FuelRemaining <= 0 {
 			for i := range r.command.EngineThrottle {
@@ -161,8 +154,17 @@ func (r *RocketClient) Run() {
 		}
 
 		if time.Since(lastTelemetry).Seconds() >= telemetryInterval {
+
+			orbit := r.physics.PredictOrbit()
+			state.OrbitApoapsis = orbit.Apoapsis
+			state.OrbitPeriapsis = orbit.Periapsis
+			state.OrbitEccentricity = orbit.Eccentricity
+			state.OrbitRequiredVelocity = orbit.RequiredVelocity
+			state.OrbitIsStable = orbit.IsStable
+
 			if err := r.sendTelemetry(state); err != nil {
-				log.Printf("Ошибка отправки телеметрии: %v", err)
+				log.Printf("Соединение потеряно, завершение работы...")
+				break
 			}
 			lastTelemetry = time.Now()
 		}
@@ -190,7 +192,7 @@ func (r *RocketClient) Run() {
 }
 
 func (r *RocketClient) sendTelemetry(state protocol.RocketState) error {
-	if !r.registered {
+	if !r.registered || r.conn == nil {
 		return nil
 	}
 
@@ -203,7 +205,11 @@ func (r *RocketClient) sendTelemetry(state protocol.RocketState) error {
 		},
 	}
 
-	return r.conn.WriteJSON(msg)
+	if err := r.conn.WriteJSON(msg); err != nil {
+		r.running = false
+		return err
+	}
+	return nil
 }
 
 func (r *RocketClient) receiveMessages() {
@@ -211,7 +217,8 @@ func (r *RocketClient) receiveMessages() {
 		var msg protocol.Message
 		if err := r.conn.ReadJSON(&msg); err != nil {
 			if r.running {
-				log.Printf("Ошибка чтения сообщения: %v", err)
+				log.Printf("Соединение с сервером потеряно: %v", err)
+				r.running = false
 			}
 			return
 		}
@@ -263,8 +270,9 @@ func (r *RocketClient) disconnect() {
 				Reason:   "Завершение полёта",
 			},
 		}
-		r.conn.WriteJSON(msg)
+		_ = r.conn.WriteJSON(msg)
 		r.conn.Close()
+		r.conn = nil
 	}
 }
 
@@ -279,6 +287,7 @@ func main() {
 	latitude := flag.Float64("lat", 45.0, "Широта запуска")
 	longitude := flag.Float64("lon", 63.0, "Долгота запуска")
 	altitude := flag.Float64("alt", 100.0, "Высота над уровнем моря")
+	targetOrbit := flag.Float64("orbit", 200000.0, "Целевая высота орбиты (м)")
 
 	flag.Parse()
 
@@ -305,7 +314,7 @@ func main() {
 		log.Fatalf("Ошибка регистрации: %v", err)
 	}
 
-	if err := client.InitPhysics(*latitude, *longitude, *altitude); err != nil {
+	if err := client.InitPhysics(*latitude, *longitude, *altitude, *targetOrbit); err != nil {
 		log.Fatalf("Ошибка инициализации физики: %v", err)
 	}
 
