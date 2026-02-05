@@ -4,11 +4,40 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#define EARTH_RADIUS 6371000.0      // Радиус Земли в метрах
-#define EARTH_MASS 5.972e24         // Масса Земли в кг
 #define G_CONSTANT 6.674e-11        // Гравитационная постоянная м3/(кг*с2)
-#define ORBITAL_VELOCITY 7900.0     // Первая космическая скорость м/с
-#define ATMOSPHERE_HEIGHT 100000.0  // Граница атмосферы м (линия Кармана)
+
+// Параметры планеты (конфигурируемые)
+typedef struct {
+    double radius;           // Радиус планеты в метрах
+    double mass;             // Масса планеты в кг
+    double atmosphere_height; // Высота атмосферы в м
+    double surface_pressure;  // Давление на поверхности (1.0 для Земли)
+    double scale_height;     // Масштабная высота атмосферы (м)
+} PlanetConfig;
+
+// Параметры для gravity turn
+typedef struct {
+    double target_altitude;   // Целевая высота орбиты (м)
+    double turn_start_alt;    // Высота начала поворота (м)
+    double turn_end_alt;      // Высота окончания поворота (м)
+    bool auto_pitch;          // Включен ли автоматический pitch
+} GravityTurnConfig;
+
+// Предсказание орбиты
+typedef struct {
+    double apoapsis;          // Апоцентр (наибольшая высота) в м
+    double periapsis;         // Перицентр (наименьшая высота) в м
+    double eccentricity;      // Эксцентриситет орбиты
+    double orbital_velocity;  // Текущая орбитальная скорость
+    double required_velocity; // Необходимая скорость для круговой орбиты
+    bool is_stable;           // Стабильна ли орбита (выше атмосферы)
+} OrbitPrediction;
+
+// Константы Земли по умолчанию
+#define EARTH_RADIUS 6371000.0
+#define EARTH_MASS 5.972e24
+#define EARTH_ATMOSPHERE 100000.0
+#define EARTH_SCALE_HEIGHT 8500.0
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -103,5 +132,22 @@ double vector_magnitude(const Vector3* v);
 Vector3 vector_normalize(const Vector3* v);
 double vector_dot(const Vector3* a, const Vector3* b);
 Vector3 vector_cross(const Vector3* a, const Vector3* b);
+
+PlanetConfig planet_earth_default(void);
+PlanetConfig planet_create(double radius, double mass, double atmosphere_height,
+                           double surface_pressure, double scale_height);
+
+GravityTurnConfig gravity_turn_for_orbit(const PlanetConfig* planet, double target_orbit_altitude);
+
+double calculate_optimal_pitch(const RocketState* state, const PlanetConfig* planet,
+                               const GravityTurnConfig* gt_config);
+
+OrbitPrediction predict_orbit(const RocketState* state, const PlanetConfig* planet);
+
+void rocket_update_with_planet(RocketState* state, const RocketConfig* config,
+                               const ControlCommand* command, const PlanetConfig* planet,
+                               double delta_time);
+
+double orbital_velocity_at_altitude(const PlanetConfig* planet, double altitude);
 
 #endif // ROCKET_PHYSICS_H
