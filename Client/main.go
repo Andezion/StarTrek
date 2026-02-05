@@ -138,16 +138,16 @@ func (r *RocketClient) Run() {
 
 		if alt < 500.0 {
 			r.command.Pitch = 0.0
-		} else if alt < 600.0 {
-			r.command.Pitch = (alt - 500.0) / (600.0 - 500.0) * 25.0 // 0° → 25°
-		} else if alt < 700.0 {
-			r.command.Pitch = 25.0 + (alt-600.0)/(700.0-600.0)*35.0 // 25° → 60°
-		} else if alt < 800.0 {
-			r.command.Pitch = 60.0 + (alt-700.0)/(800.0-700.0)*20.0 // 60° → 80°
-		} else if alt < 900.0 {
-			r.command.Pitch = 80.0 + (alt-800.0)/(900.0-800.0)*10.0 // 80° → 90°
+		} else if alt < 1000.0 {
+			r.command.Pitch = (alt - 500.0) / (1000.0 - 500.0) * 25.0 // 0° → 25°
+		} else if alt < 1500.0 {
+			r.command.Pitch = 25.0 + (alt-1000.0)/(1500.0-1000.0)*35.0 // 25° → 60°
+		} else if alt < 2000.0 {
+			r.command.Pitch = 60.0 + (alt-1500.0)/(2000.0-1500.0)*20.0 // 60° → 80°
+		} else if alt < 2500.0 {
+			r.command.Pitch = 80.0 + (alt-2000.0)/(2500.0-2000.0)*10.0 // 80° → 90°
 		} else {
-			r.command.Pitch = 90.0 // Полностью горизонтально
+			r.command.Pitch = 90.0
 		}
 
 		r.physics.Update(&r.command, dt)
