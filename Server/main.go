@@ -19,6 +19,7 @@ type LogEntry struct {
 	Timestamp time.Time `json:"timestamp"`
 	Message   string    `json:"message"`
 	Level     string    `json:"level"`
+	RocketID  string    `json:"rocket_id,omitempty"`
 }
 
 type LogBuffer struct {
@@ -35,12 +36,17 @@ func NewLogBuffer(maxSize int) *LogBuffer {
 }
 
 func (lb *LogBuffer) Add(level, message string) {
+	lb.AddWithRocket(level, message, "")
+}
+
+func (lb *LogBuffer) AddWithRocket(level, message, rocketID string) {
 	lb.mu.Lock()
 	defer lb.mu.Unlock()
 	entry := LogEntry{
 		Timestamp: time.Now(),
 		Message:   message,
 		Level:     level,
+		RocketID:  rocketID,
 	}
 	if len(lb.entries) >= lb.maxSize {
 		lb.entries = lb.entries[1:]
@@ -68,12 +74,32 @@ func (lb *LogBuffer) GetSince(since time.Time) []LogEntry {
 	return result
 }
 
+func (lb *LogBuffer) GetByRocket(rocketID string, since time.Time) []LogEntry {
+	lb.mu.RLock()
+	defer lb.mu.RUnlock()
+	var result []LogEntry
+	for _, entry := range lb.entries {
+		matchesRocket := (rocketID == "" && entry.RocketID == "") || (rocketID != "" && entry.RocketID == rocketID)
+		matchesTime := since.IsZero() || entry.Timestamp.After(since)
+		if matchesRocket && matchesTime {
+			result = append(result, entry)
+		}
+	}
+	return result
+}
+
 var serverLogs = NewLogBuffer(500)
 
 func serverLog(level, format string, args ...interface{}) {
 	msg := fmt.Sprintf(format, args...)
 	log.Print(msg)
 	serverLogs.Add(level, msg)
+}
+
+func rocketLog(rocketID, level, format string, args ...interface{}) {
+	msg := fmt.Sprintf(format, args...)
+	log.Print(msg)
+	serverLogs.AddWithRocket(level, msg, rocketID)
 }
 
 var upgrader = websocket.Upgrader{
@@ -275,8 +301,7 @@ func (s *Server) handleTelemetry(rocketConn *RocketConnection, msg protocol.Mess
 	})
 
 	if int(telemetryMsg.State.Time)%10 == 0 {
-		serverLog("info", "Ракета %s: высота=%.2f км, скорость=%.1f м/с, топливо=%.0f кг",
-			rocketConn.ID,
+		rocketLog(rocketConn.ID, "info", "Высота=%.2f км, скорость=%.1f м/с, топливо=%.0f кг",
 			telemetryMsg.State.Altitude/1000.0,
 			telemetryMsg.State.Speed,
 			telemetryMsg.State.FuelRemaining)
@@ -400,21 +425,24 @@ func (s *Server) checkCollisions() {
 					severity = "critical"
 				}
 
-				warning := fmt.Sprintf("Опасное сближение с ракетой %s! Расстояние: %.1f м", rocket2.ID, distance)
+				warning1 := fmt.Sprintf("Опасное сближение с ракетой %s! Расстояние: %.1f м", rocket2.ID, distance)
 				s.sendMessage(rocket1.Conn, protocol.MsgTypeWarning, protocol.WarningMessage{
 					RocketID: rocket1.ID,
-					Warning:  warning,
+					Warning:  warning1,
 					Severity: severity,
 				})
 
-				warning = fmt.Sprintf("Опасное сближение с ракетой %s! Расстояние: %.1f м", rocket1.ID, distance)
+				warning2 := fmt.Sprintf("Опасное сближение с ракетой %s! Расстояние: %.1f м", rocket1.ID, distance)
 				s.sendMessage(rocket2.Conn, protocol.MsgTypeWarning, protocol.WarningMessage{
 					RocketID: rocket2.ID,
-					Warning:  warning,
+					Warning:  warning2,
 					Severity: severity,
 				})
 
-				serverLog("warning", "Предупреждение: ракеты %s и %s на расстоянии %.1f м", rocket1.ID, rocket2.ID, distance)
+				// Логируем предупреждение для обеих ракет
+				rocketLog(rocket1.ID, "warning", "Сближение с %s: %.1f м", rocket2.ID, distance)
+				rocketLog(rocket2.ID, "warning", "Сближение с %s: %.1f м", rocket1.ID, distance)
+				serverLog("warning", "Ракеты %s и %s на расстоянии %.1f м", rocket1.ID, rocket2.ID, distance)
 			}
 
 			rocket1.mu.RUnlock()
@@ -463,17 +491,17 @@ func (s *Server) handleRocketList(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
 	sinceStr := r.URL.Query().Get("since")
-	var logs []LogEntry
+	rocketID := r.URL.Query().Get("rocket_id") // Новый параметр для фильтрации
+
+	var since time.Time
 	if sinceStr != "" {
-		since, err := time.Parse(time.RFC3339Nano, sinceStr)
+		parsed, err := time.Parse(time.RFC3339Nano, sinceStr)
 		if err == nil {
-			logs = serverLogs.GetSince(since)
-		} else {
-			logs = serverLogs.GetAll()
+			since = parsed
 		}
-	} else {
-		logs = serverLogs.GetAll()
 	}
+
+	logs := serverLogs.GetByRocket(rocketID, since)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(logs)
@@ -741,7 +769,7 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
     </div>
     <div class="container">
         <div class="sidebar">
-            <div class="sidebar-header">Активные ракеты</div>
+            <div class="sidebar-header" onclick="deselectRocket()" style="cursor: pointer;" title="Клик для просмотра серверных логов">Активные ракеты</div>
             <div class="rocket-list" id="rocket-list">
                 <div style="padding: 20px; color: #6e7681; text-align: center; font-size: 12px;">
                     Нет активных ракет
@@ -800,6 +828,27 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
                     <div class="telemetry-card">
                         <div class="label">Позиция Z</div>
                         <div><span class="value" id="t-pz" style="font-size: 14px;">0</span><span class="unit">м</span></div>
+                    </div>
+                    <div class="telemetry-card wide" style="background: linear-gradient(135deg, #1a2332, #0d1b2a); border-color: #4fc3f7;">
+                        <div class="label" style="color: #4fc3f7;">Предсказание орбиты</div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-top: 8px;">
+                            <div>
+                                <div class="label">Апоцентр</div>
+                                <div><span class="value" id="t-apoapsis" style="font-size: 18px;">-</span><span class="unit">км</span></div>
+                            </div>
+                            <div>
+                                <div class="label">Перицентр</div>
+                                <div><span class="value" id="t-periapsis" style="font-size: 18px;">-</span><span class="unit">км</span></div>
+                            </div>
+                            <div>
+                                <div class="label">Орб. скорость</div>
+                                <div><span class="value" id="t-orbital-v" style="font-size: 18px;">-</span><span class="unit">м/с</span></div>
+                            </div>
+                        </div>
+                        <div style="margin-top: 12px; display: flex; align-items: center; gap: 12px;">
+                            <span class="label">Статус орбиты:</span>
+                            <span id="t-orbit-status" class="status-badge" style="font-size: 12px;">НЕ ОПРЕДЕЛЕНА</span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -880,9 +929,7 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
                 case 'rocket_left':
                     delete rockets[msg.data.rocket_id];
                     if (msg.data.rocket_id === selectedRocketId) {
-                        selectedRocketId = null;
-                        document.getElementById('no-rocket-msg').style.display = 'flex';
-                        document.getElementById('telemetry-grid').style.display = 'none';
+                        deselectRocket();
                     }
                     renderRocketList();
                     break;
@@ -930,6 +977,28 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
             document.getElementById('telemetry-grid').style.display = 'grid';
             renderRocketList();
             if (rockets[id]) renderTelemetry(rockets[id]);
+            // Переключаем логи на выбранную ракету
+            switchLogView(id);
+            updateLogTabLabel();
+        }
+
+        function deselectRocket() {
+            selectedRocketId = null;
+            document.getElementById('no-rocket-msg').style.display = 'flex';
+            document.getElementById('telemetry-grid').style.display = 'none';
+            renderRocketList();
+            // Возвращаемся к серверным логам
+            switchLogView(null);
+            updateLogTabLabel();
+        }
+
+        function updateLogTabLabel() {
+            const tabLabel = document.querySelector('.tab[data-tab="logs"]');
+            if (selectedRocketId && rockets[selectedRocketId]) {
+                tabLabel.textContent = 'Логи: ' + rockets[selectedRocketId].name;
+            } else {
+                tabLabel.textContent = 'Логи сервера';
+            }
         }
 
         function renderTelemetry(rocket) {
@@ -963,12 +1032,60 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
             document.getElementById('t-px').textContent = s.position.x.toFixed(0);
             document.getElementById('t-py').textContent = s.position.y.toFixed(0);
             document.getElementById('t-pz').textContent = s.position.z.toFixed(0);
+
+            // Орбитальные данные
+            const apoapsis = s.orbit_apoapsis;
+            const periapsis = s.orbit_periapsis;
+            const reqV = s.orbit_required_velocity;
+            const isStable = s.orbit_is_stable;
+
+            if (apoapsis && apoapsis > 0) {
+                document.getElementById('t-apoapsis').textContent = (apoapsis / 1000).toFixed(1);
+            } else {
+                document.getElementById('t-apoapsis').textContent = '-';
+            }
+
+            if (periapsis !== undefined) {
+                document.getElementById('t-periapsis').textContent = (periapsis / 1000).toFixed(1);
+            } else {
+                document.getElementById('t-periapsis').textContent = '-';
+            }
+
+            if (reqV && reqV > 0) {
+                document.getElementById('t-orbital-v').textContent = reqV.toFixed(0);
+            } else {
+                document.getElementById('t-orbital-v').textContent = '-';
+            }
+
+            const orbitStatusEl = document.getElementById('t-orbit-status');
+            if (s.in_orbit) {
+                orbitStatusEl.textContent = 'СТАБИЛЬНАЯ ОРБИТА';
+                orbitStatusEl.className = 'status-badge status-orbit';
+            } else if (isStable) {
+                orbitStatusEl.textContent = 'ВЫХОД НА ОРБИТУ';
+                orbitStatusEl.className = 'status-badge status-orbit';
+            } else if (periapsis !== undefined && periapsis > 0) {
+                orbitStatusEl.textContent = 'СУБОРБИТАЛЬНАЯ';
+                orbitStatusEl.className = 'status-badge status-landed';
+            } else {
+                orbitStatusEl.textContent = 'БАЛЛИСТИЧЕСКАЯ';
+                orbitStatusEl.className = 'status-badge status-crashed';
+            }
         }
+
+        let currentLogRocketId = null; // Текущий фильтр логов (null = серверные логи)
 
         function pollLogs() {
             let url = '/api/logs';
+            const params = [];
             if (lastLogTime) {
-                url += '?since=' + encodeURIComponent(lastLogTime);
+                params.push('since=' + encodeURIComponent(lastLogTime));
+            }
+            if (currentLogRocketId) {
+                params.push('rocket_id=' + encodeURIComponent(currentLogRocketId));
+            }
+            if (params.length > 0) {
+                url += '?' + params.join('&');
             }
             fetch(url)
                 .then(r => r.json())
@@ -990,6 +1107,14 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
                     container.scrollTop = container.scrollHeight;
                 })
                 .catch(() => {});
+        }
+
+        function switchLogView(rocketId) {
+            // Переключение между серверными логами и логами ракеты
+            currentLogRocketId = rocketId;
+            lastLogTime = null; // Сброс времени для загрузки всех логов
+            document.getElementById('log-container').innerHTML = ''; // Очистка
+            pollLogs(); // Загрузка логов
         }
 
         function escapeHtml(str) {
