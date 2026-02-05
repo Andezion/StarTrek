@@ -67,6 +67,12 @@ type RocketState struct {
 	Landed        bool    `json:"landed"`         // Приземлилась ли
 	Crashed       bool    `json:"crashed"`        // Разбилась ли
 	Time          float64 `json:"time"`           // Время симуляции в секундах
+
+	OrbitApoapsis         float64 `json:"orbit_apoapsis"`          // Апоцентр (м), -1 если не определен
+	OrbitPeriapsis        float64 `json:"orbit_periapsis"`         // Перицентр (м)
+	OrbitEccentricity     float64 `json:"orbit_eccentricity"`      // Эксцентриситет
+	OrbitRequiredVelocity float64 `json:"orbit_required_velocity"` // Необходимая скорость для круговой орбиты
+	OrbitIsStable         bool    `json:"orbit_is_stable"`         // Стабильна ли орбита
 }
 
 type ControlCommand struct {
