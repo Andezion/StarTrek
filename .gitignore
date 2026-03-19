@@ -2,6 +2,11 @@ Client/bin/
 Client/client
 Client/cosmodrom-client
 Client/rocket-client
+
 Graphic/.cache/
 Graphic/build/
 Graphic/include/raygui.h
+
+Physics/test_physics
+Physics/rocket_physics.o
+Physics/librocket_physics.so
