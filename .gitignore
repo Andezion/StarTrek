@@ -1,0 +1,4 @@
+Client/bin/
+Graphic/.cache/
+Graphic/build/
+Graphic/include/raygui.h
