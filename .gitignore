@@ -1,4 +1,7 @@
 Client/bin/
+Client/client
+Client/cosmodrom-client
+Client/rocket-client
 Graphic/.cache/
 Graphic/build/
 Graphic/include/raygui.h
